@@ -15,7 +15,9 @@ def DynamicConv(input_size, kernel_size=1, padding_l=None, num_heads=1,
                 weight_dropout=0., weight_softmax=False,
                 renorm_padding=False, bias=False, conv_bias=False,
                 query_size=None, in_proj=False):
+    print('choice....')
     if torch.cuda.is_available():
+        print('cuda is available')
         try:
             from fairseq.modules.dynamicconv_layer import DynamicconvLayer
             return DynamicconvLayer(input_size, kernel_size=kernel_size,
@@ -24,6 +26,7 @@ def DynamicConv(input_size, kernel_size=1, padding_l=None, num_heads=1,
                                     weight_softmax=weight_softmax, bias=bias)
         except ImportError as e:
             print(e)
+    print('cuda is not available')
     return DynamicConv1dTBC(input_size, kernel_size=kernel_size,
                             padding_l=padding_l, num_heads=num_heads,
                             weight_dropout=weight_dropout,
