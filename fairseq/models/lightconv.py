@@ -462,6 +462,7 @@ class LightConvEncoderLayer(nn.Module):
             self.conv = DDynamicConv(self.conv_dim, kernel_size, padding_l=padding_l,
                                     weight_softmax=args.weight_softmax,
                                     num_heads=args.encoder_attention_heads,
+                                    num_proj_heads=args.encoder_attention_proj_heads,
                                     weight_dropout=args.weight_dropout)
         else:
             raise NotImplementedError
@@ -555,6 +556,7 @@ class LightConvDecoderLayer(nn.Module):
             self.conv = DDynamicConv(self.conv_dim, kernel_size, padding_l=kernel_size-1,
                                     weight_softmax=args.weight_softmax,
                                     num_heads=args.decoder_attention_heads,
+                                    num_proj_heads=args.decoder_attention_proj_heads,
                                     weight_dropout=args.weight_dropout)
         else:
             raise NotImplementedError
@@ -681,6 +683,7 @@ def base_architecture(args):
     args.encoder_ffn_embed_dim = getattr(args, 'encoder_ffn_embed_dim', 2048)
     args.encoder_layers = getattr(args, 'encoder_layers', 7)
     args.encoder_attention_heads = getattr(args, 'encoder_attention_heads', 8)
+    args.encoder_attention_proj_heads = getattr(args, 'encoder_attention_proj_heads', 64)
     args.encoder_normalize_before = getattr(args, 'encoder_normalize_before', False)
     args.encoder_learned_pos = getattr(args, 'encoder_learned_pos', False)
     args.decoder_embed_path = getattr(args, 'decoder_embed_path', None)
@@ -688,6 +691,7 @@ def base_architecture(args):
     args.decoder_ffn_embed_dim = getattr(args, 'decoder_ffn_embed_dim', args.encoder_ffn_embed_dim)
     args.decoder_layers = getattr(args, 'decoder_layers', 6)
     args.decoder_attention_heads = getattr(args, 'decoder_attention_heads', 8)
+    args.decoder_attention_proj_heads = getattr(args, 'decoder_attention_proj_heads', 64)
     args.decoder_normalize_before = getattr(args, 'decoder_normalize_before', False)
     args.decoder_learned_pos = getattr(args, 'decoder_learned_pos', False)
     args.attention_dropout = getattr(args, 'attention_dropout', 0.)
