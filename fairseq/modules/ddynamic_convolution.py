@@ -100,7 +100,7 @@ class DDynamicConv1dTBC(nn.Module):
 
         if query is None:
             query = x
-        if unfold:
+        if True:  # unfold:
             output = self._forward_unfolded(x, incremental_state, query)
         else:
             output = self._forward_expanded(x, incremental_state, query)
