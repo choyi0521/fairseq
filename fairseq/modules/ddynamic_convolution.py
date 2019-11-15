@@ -11,20 +11,11 @@ from fairseq import utils
 from .unfold import unfold1d
 
 
-def DynamicConv(input_size, kernel_size=1, padding_l=None, num_heads=1,
+def DDynamicConv(input_size, kernel_size=1, padding_l=None, num_heads=1,
                 weight_dropout=0., weight_softmax=False,
                 renorm_padding=False, bias=False, conv_bias=False,
                 query_size=None, in_proj=False):
-    if torch.cuda.is_available():
-        try:
-            from fairseq.modules.dynamicconv_layer import DynamicconvLayer
-            return DynamicconvLayer(input_size, kernel_size=kernel_size,
-                                    padding_l=padding_l, num_heads=num_heads,
-                                    weight_dropout=weight_dropout,
-                                    weight_softmax=weight_softmax, bias=bias)
-        except ImportError as e:
-            print(e)
-    return DynamicConv1dTBC(input_size, kernel_size=kernel_size,
+    return DDynamicConv1dTBC(input_size, kernel_size=kernel_size,
                             padding_l=padding_l, num_heads=num_heads,
                             weight_dropout=weight_dropout,
                             weight_softmax=weight_softmax, bias=bias)
@@ -38,8 +29,8 @@ def Linear(in_features, out_features, bias=True):
     return m
 
 
-class DynamicConv1dTBC(nn.Module):
-    '''Dynamic lightweight convolution taking T x B x C inputs
+class DDynamicConv1dTBC(nn.Module):
+    '''Dynamic Dynamic lightweight convolution taking T x B x C inputs
     Args:
         input_size: # of channels of the input
         kernel_size: convolution channels
