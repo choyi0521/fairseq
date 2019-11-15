@@ -11,12 +11,12 @@ from fairseq import utils
 from .unfold import unfold1d
 
 
-def DDynamicConv(input_size, kernel_size=1, padding_l=None, num_heads=1,
+def DDynamicConv(input_size, kernel_size=1, padding_l=None, num_heads=1, num_proj_heads=1,
                 weight_dropout=0., weight_softmax=False,
                 renorm_padding=False, bias=False, conv_bias=False,
                 query_size=None, in_proj=False):
     return DDynamicConv1dTBC(input_size, kernel_size=kernel_size,
-                            padding_l=padding_l, num_heads=num_heads,
+                            padding_l=padding_l, num_heads=num_heads, num_proj_heads=num_proj_heads,
                             weight_dropout=weight_dropout,
                             weight_softmax=weight_softmax, bias=bias)
 
@@ -53,7 +53,7 @@ class DDynamicConv1dTBC(nn.Module):
             `(num_heads, 1, kernel_size)`
         bias:   the learnable bias of the module of shape `(input_size)`
     '''
-    def __init__(self, input_size, kernel_size=1, padding_l=None, num_heads=1,
+    def __init__(self, input_size, kernel_size=1, padding_l=None, num_heads=1, num_proj_heads=1,
                  weight_dropout=0., weight_softmax=False,
                  renorm_padding=False, bias=False, conv_bias=False,
                  query_size=None, in_proj=False):
@@ -63,7 +63,7 @@ class DDynamicConv1dTBC(nn.Module):
         self.kernel_size = kernel_size
         self.padding_l = padding_l
         self.num_heads = num_heads
-        self.num_proj_heads = 4
+        self.num_proj_heads = num_proj_heads
         self.weight_dropout = weight_dropout
         self.weight_softmax = weight_softmax
         self.renorm_padding = renorm_padding
@@ -111,17 +111,20 @@ class DDynamicConv1dTBC(nn.Module):
         return output
 
     def _project_weight(self, x, query):
-        T, B, _ = x.size()
         K, H = self.kernel_size, self.num_heads
         G = self.num_proj_heads
         if self.in_proj:
-            assert self.input_size%G == 0
-            proj = self.weight_linear(x.view(-1, G))
+            T, B, _ = x.size()
+            Q = self.input_size / G
+            assert Q*G == self.input_size
+            proj = self.weight_linear(x.view(-1, G)).view(T*B, Q, -1).sum(1)
             x = proj.narrow(2, 0, self.input_size).contiguous()
             weight = proj.narrow(2, self.input_size, H*K).contiguous().view(T*B*H, -1)
         else:
-            assert self.query_size%G == 0
-            weight = self.weight_linear(query.view(-1, G)).view(T*B*H, -1)
+            T, B, _ = query.size()
+            Q = self.query_size / G
+            assert Q*G == self.query_size
+            weight = self.weight_linear(query.view(-1, G)).view(T*B, Q, -1).sum(1).view(T*B*H, -1)
         return x, weight
 
     def _forward_unfolded(self, x, incremental_state, query):
