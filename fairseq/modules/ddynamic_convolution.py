@@ -72,7 +72,7 @@ class DDynamicConv1dTBC(nn.Module):
         self.idxs = [torch.randperm(input_size) for i in range(input_size//num_proj_heads)]
 
         assert in_proj == False
-        assert query_size%num_proj_heads==0
+        assert self.query_size%num_proj_heads==0
         self.weight_linears = nn.ModuleList([
             Linear(self.query_size // num_proj_heads, num_heads * kernel_size * 1, bias=bias)
             for i in range(num_proj_heads)])
