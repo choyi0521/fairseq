@@ -109,7 +109,7 @@ class DDynamicConv1dTBC(nn.Module):
             query = x
         query = query.view(T, B*G, Q)
         x = x.view(T,B,G,Q)
-        x = torch.cat([x[:,:,i:i+1,self.idxs[i]] for i in range(G)],3).view(T,B*G,Q)
+        x = torch.cat([x[:, :, i:i+1, self.idxs[i]] for i in range(G)],3).view(T, B*G, Q)
         if unfold:
             output = self._forward_unfolded(x, incremental_state, query)
         else:
@@ -124,7 +124,6 @@ class DDynamicConv1dTBC(nn.Module):
         assert self.in_proj == False
         T, B, _ = x.size()
         K, H = self.kernel_size, self.num_heads
-        G = self.num_proj_heads
         if self.in_proj:
             proj = self.weight_linear(x)
             x = proj.narrow(2, 0, self.input_size).contiguous()
