@@ -69,7 +69,7 @@ class DDynamicConv1dTBC(nn.Module):
         self.renorm_padding = renorm_padding
 
         assert input_size%num_proj_heads==0
-        self.idxs = [torch.randperm(input_size) for i in range(input_size//num_proj_heads)]
+        self.idxs = [torch.randperm(input_size//num_proj_heads) for i in range(num_proj_heads)]
 
         assert in_proj == False
         assert self.query_size%num_proj_heads==0
