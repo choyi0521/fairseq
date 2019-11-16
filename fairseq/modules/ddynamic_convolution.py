@@ -117,14 +117,14 @@ class DDynamicConv1dTBC(nn.Module):
             T, B, _ = x.size()
             Q = self.input_size // G
             assert Q*G == self.input_size
-            proj = self.weight_linear(x.view(-1, G)).view(T*B, Q, -1).sum(1)
+            proj = self.weight_linear(x.view(-1, G)).view(T*B, Q, -1).mean(1)
             x = proj.narrow(2, 0, self.input_size).contiguous()
             weight = proj.narrow(2, self.input_size, H*K).contiguous().view(T*B*H, -1)
         else:
             T, B, _ = query.size()
             Q = self.query_size // G
             assert Q*G == self.query_size
-            weight = self.weight_linear(query.view(-1, G)).view(T*B, Q, -1).sum(1).view(T*B*H, -1)
+            weight = self.weight_linear(query.view(-1, G)).view(T*B, Q, -1).mean(1).view(T*B*H, -1)
         return x, weight
 
     def _forward_unfolded(self, x, incremental_state, query):
