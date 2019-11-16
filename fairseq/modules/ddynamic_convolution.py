@@ -113,7 +113,7 @@ class DDynamicConv1dTBC(nn.Module):
 
         if self.conv_bias is not None:
             output = output + self.conv_bias.view(1, 1, -1)
-        return output
+        return output.view(T, B, C)
 
     def _project_weight(self, x, query):
         assert self.in_proj == False
