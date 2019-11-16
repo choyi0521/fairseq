@@ -83,7 +83,6 @@ class DDynamicConv1dTBC(nn.Module):
 
     def reset_parameters(self):
         self.weight_linear.reset_parameters()
-        self.output_linear.reset_parameters()
         if self.conv_bias is not None:
             nn.init.constant_(self.conv_bias, 0.)
 
