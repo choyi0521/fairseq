@@ -68,14 +68,15 @@ class DDynamicConv1dTBC(nn.Module):
         self.weight_softmax = weight_softmax
         self.renorm_padding = renorm_padding
 
-        self.idx = torch.randperm(input_size)
+        assert input_size%num_proj_heads==0
+        self.idxs = [torch.randperm(input_size) for i in range(input_size//num_proj_heads)]
 
         assert in_proj == False
-        assert self.query_size%num_proj_heads==0
+        assert query_size%num_proj_heads==0
         self.weight_linears = nn.ModuleList([
             Linear(self.query_size // num_proj_heads, num_heads * kernel_size * 1, bias=bias)
             for i in range(num_proj_heads)])
-        self.output_linear = Linear(num_proj_heads, 1)
+        self.output_linear = Linear(input_size, input_size)
 
         if conv_bias:
             self.conv_bias = nn.Parameter(torch.Tensor(input_size))
@@ -111,20 +112,16 @@ class DDynamicConv1dTBC(nn.Module):
         H = self.num_heads
         Q = C // G
         R = C // H
-        tx = x
-        roll = 3
         outputs = []
         for i in range(G):
             if query is None:
                 query = x
             if unfold:
-                outputs.append(self._forward_unfolded(tx, incremental_state, query.narrow(2, i*Q, Q), self.weight_linears[i]))
+                outputs.append(self._forward_unfolded(x.narrow(2, i*Q, Q)[:,:,self.idxs[i]], incremental_state, query.narrow(2, i*Q, Q), self.weight_linears[i]))
             else:
-                outputs.append(self._forward_expanded(tx, incremental_state, query.narrow(2, i*Q, Q), self.weight_linears[i]))
-            if i < G-1:
-                tx = tx[:,:,self.idx]
+                outputs.append(self._forward_expanded(x.narrow(2, i*Q, Q)[:,:,self.idxs[i]], incremental_state, query.narrow(2, i*Q, Q), self.weight_linears[i]))
 
-        output = self.output_linear(torch.stack(outputs, 3)).squeeze(3)
+        output = self.output_linear(torch.cat(outputs, 2))
 
         if self.conv_bias is not None:
             output = output + self.conv_bias.view(1, 1, -1)
@@ -140,8 +137,8 @@ class DDynamicConv1dTBC(nn.Module):
 
         if self.in_proj:
             proj = weight_linear(x)
-            x = proj.narrow(2, 0, self.input_size).contiguous()
-            weight = proj.narrow(2, self.input_size, H*K).contiguous().view(T*B*H, -1)
+            x = proj.narrow(2, 0, C).contiguous()
+            weight = proj.narrow(2, C, H*K).contiguous().view(T*B*H, -1)
         else:
             weight = weight_linear(query).view(T*B*H, -1)
 
@@ -193,8 +190,8 @@ class DDynamicConv1dTBC(nn.Module):
         assert R * H == C == self.input_size
         if self.in_proj:
             proj = weight_linear(x)
-            x = proj.narrow(2, 0, self.input_size).contiguous()
-            weight = proj.narrow(2, self.input_size, H*K).contiguous().view(T*B*H, -1)
+            x = proj.narrow(2, 0, C).contiguous()
+            weight = proj.narrow(2, C, H*K).contiguous().view(T*B*H, -1)
         else:
             weight = weight_linear(query).view(T*B*H, -1)
 
