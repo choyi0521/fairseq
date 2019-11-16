@@ -11,12 +11,12 @@ from fairseq import utils
 from .unfold import unfold1d
 
 
-def DDynamicConv(input_size, kernel_size=1, padding_l=None, num_heads=1,
+def DDynamicConv(input_size, kernel_size=1, padding_l=None, num_heads=1, num_proj_heads=1,
                 weight_dropout=0., weight_softmax=False,
                 renorm_padding=False, bias=False, conv_bias=False,
                 query_size=None, in_proj=False):
     return DDynamicConv1dTBC(input_size, kernel_size=kernel_size,
-                            padding_l=padding_l, num_heads=num_heads,
+                            padding_l=padding_l, num_heads=num_heads, num_proj_heads=num_proj_heads,
                             weight_dropout=weight_dropout,
                             weight_softmax=weight_softmax, bias=bias)
 
@@ -53,7 +53,7 @@ class DDynamicConv1dTBC(nn.Module):
             `(num_heads, 1, kernel_size)`
         bias:   the learnable bias of the module of shape `(input_size)`
     '''
-    def __init__(self, input_size, kernel_size=1, padding_l=None, num_heads=1,
+    def __init__(self, input_size, kernel_size=1, padding_l=None, num_heads=1, num_proj_heads=1,
                  weight_dropout=0., weight_softmax=False,
                  renorm_padding=False, bias=False, conv_bias=False,
                  query_size=None, in_proj=False):
@@ -63,14 +63,15 @@ class DDynamicConv1dTBC(nn.Module):
         self.kernel_size = kernel_size
         self.padding_l = padding_l
         self.num_heads = num_heads
+        self.num_proj_heads = num_proj_heads
         self.weight_dropout = weight_dropout
         self.weight_softmax = weight_softmax
         self.renorm_padding = renorm_padding
 
         if in_proj:
-            self.weight_linear = Linear(self.input_size, self.input_size + num_heads * kernel_size * 1)
+            self.weight_linear = Linear(self.num_proj_heads, self.input_size + num_heads * kernel_size * 1)
         else:
-            self.weight_linear = Linear(self.query_size, num_heads * kernel_size * 1, bias=bias)
+            self.weight_linear = Linear(self.num_proj_heads, num_heads * kernel_size * 1, bias=bias)
         if conv_bias:
             self.conv_bias = nn.Parameter(torch.Tensor(input_size))
         else:
@@ -109,6 +110,23 @@ class DDynamicConv1dTBC(nn.Module):
             output = output + self.conv_bias.view(1, 1, -1)
         return output
 
+    def _project_weight(self, x, query):
+        K, H = self.kernel_size, self.num_heads
+        G = self.num_proj_heads
+        if self.in_proj:
+            T, B, _ = x.size()
+            Q = self.input_size // G
+            assert Q*G == self.input_size
+            proj = self.weight_linear(x.view(-1, G)).view(T*B, Q, -1).mean(1)
+            x = proj.narrow(2, 0, self.input_size).contiguous()
+            weight = proj.narrow(2, self.input_size, H*K).contiguous().view(T*B*H, -1)
+        else:
+            T, B, _ = query.size()
+            Q = self.query_size // G
+            assert Q*G == self.query_size
+            weight = self.weight_linear(query.view(-1, G)).view(T*B, Q, -1).mean(1).view(T*B*H, -1)
+        return x, weight
+
     def _forward_unfolded(self, x, incremental_state, query):
         '''The conventional implementation of convolutions.
         Unfolding the input by having a window shifting to the right.'''
@@ -117,12 +135,7 @@ class DDynamicConv1dTBC(nn.Module):
         R = C // H
         assert R * H == C == self.input_size
 
-        if self.in_proj:
-            proj = self.weight_linear(x)
-            x = proj.narrow(2, 0, self.input_size).contiguous()
-            weight = proj.narrow(2, self.input_size, H*K).contiguous().view(T*B*H, -1)
-        else:
-            weight = self.weight_linear(query).view(T*B*H, -1)
+        x, weight = self._project_weight(x, query)
 
         # renorm_padding is only implemented in _forward_expanded
         assert not self.renorm_padding or incremental_state is not None
@@ -170,12 +183,7 @@ class DDynamicConv1dTBC(nn.Module):
         K, H = self.kernel_size, self.num_heads
         R = C // H
         assert R * H == C == self.input_size
-        if self.in_proj:
-            proj = self.weight_linear(x)
-            x = proj.narrow(2, 0, self.input_size).contiguous()
-            weight = proj.narrow(2, self.input_size, H*K).contiguous().view(T*B*H, -1)
-        else:
-            weight = self.weight_linear(query).view(T*B*H, -1)
+        x, weight = self._project_weight(x, query)
 
         if not self.renorm_padding:
             if self.weight_softmax:
@@ -220,9 +228,9 @@ class DDynamicConv1dTBC(nn.Module):
         return utils.set_incremental_state(self, incremental_state, 'input_buffer', new_buffer)
 
     def extra_repr(self):
-        s = '{}, kernel_size={}, padding_l={}, num_heads={}, weight_softmax={}, conv_bias={}, renorm_padding={}, in_proj={}'.format(
+        s = '{}, kernel_size={}, padding_l={}, num_heads={}, num_proj_heads={}, weight_softmax={}, conv_bias={}, renorm_padding={}, in_proj={}'.format(
             self.input_size, self.kernel_size, self.padding_l,
-            self.num_heads, self.weight_softmax, self.conv_bias is not None, self.renorm_padding,
+            self.num_heads, self.num_proj_heads, self.weight_softmax, self.conv_bias is not None, self.renorm_padding,
             self.in_proj,
         )
 
