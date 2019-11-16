@@ -133,7 +133,7 @@ class DDynamicConv1dTBC(nn.Module):
         T, B, C = x.size()
         K, H = self.kernel_size, self.num_heads
         R = C // H
-        assert R * H == C == self.input_size
+        assert R * H == C == self.input_size//self.num_proj_heads
 
         if self.in_proj:
             proj = weight_linear(x)
@@ -187,7 +187,7 @@ class DDynamicConv1dTBC(nn.Module):
         T, B, C = x.size()
         K, H = self.kernel_size, self.num_heads
         R = C // H
-        assert R * H == C == self.input_size
+        assert R * H == C == self.input_size//self.num_proj_heads
         if self.in_proj:
             proj = weight_linear(x)
             x = proj.narrow(2, 0, C).contiguous()
