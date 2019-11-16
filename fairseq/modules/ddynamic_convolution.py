@@ -115,12 +115,10 @@ class DDynamicConv1dTBC(nn.Module):
         for i in range(G):
             if query is None:
                 query = x
-            print(query.size())
-            query = query.narrow(2, i*Q, Q)
             if unfold:
-                outputs.append(self._forward_unfolded(tx.view(T,B,C), incremental_state, query, self.weight_linears[i]))
+                outputs.append(self._forward_unfolded(tx.view(T,B,C), incremental_state, query.narrow(2, i*Q, Q), self.weight_linears[i]))
             else:
-                outputs.append(self._forward_expanded(tx.view(T,B,C), incremental_state, query, self.weight_linears[i]))
+                outputs.append(self._forward_expanded(tx.view(T,B,C), incremental_state, query.narrow(2, i*Q, Q), self.weight_linears[i]))
             tx = torch.cat([tx[:, :, :, j: j+1].roll(j*roll, 2) for j in range(R)], 3)
 
         output = self.output_linear(torch.cat(outputs, 3)).squeeze(3)
