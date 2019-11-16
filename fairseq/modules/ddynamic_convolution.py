@@ -69,10 +69,8 @@ class DDynamicConv1dTBC(nn.Module):
         self.renorm_padding = renorm_padding
 
         self.idxs = [torch.randperm(self.input_size // num_proj_heads) for i in range(num_proj_heads)]
-        if in_proj:
-            self.weight_linear = Linear(self.input_size//self.num_proj_heads, self.input_size + num_heads * kernel_size * 1)
-        else:
-            self.weight_linear = Linear(self.query_size//self.num_proj_heads, num_heads * kernel_size * 1, bias=bias)
+        assert in_proj == False
+        self.weight_linear = Linear(self.query_size//self.num_proj_heads, num_proj_heads*num_heads * kernel_size * 1, bias=bias)
         self.output_linear = Linear(self.input_size, self.input_size)
         if conv_bias:
             self.conv_bias = nn.Parameter(torch.Tensor(input_size))
@@ -124,12 +122,7 @@ class DDynamicConv1dTBC(nn.Module):
         assert self.in_proj == False
         T, B, _ = x.size()
         K, H = self.kernel_size, self.num_heads
-        if self.in_proj:
-            proj = self.weight_linear(x)
-            x = proj.narrow(2, 0, self.input_size).contiguous()
-            weight = proj.narrow(2, self.input_size, H*K).contiguous().view(T*B*H, -1)
-        else:
-            weight = self.weight_linear(query).view(T*B*H, -1)
+        weight = self.weight_linear(query).view(T*B*H, -1)
         return x, weight
 
     def _forward_unfolded(self, x, incremental_state, query):
