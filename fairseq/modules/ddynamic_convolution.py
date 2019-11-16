@@ -115,6 +115,7 @@ class DDynamicConv1dTBC(nn.Module):
         for i in range(G):
             if query is None:
                 query = x
+            print(query.size())
             query = query.narrow(2, i*Q, Q)
             if unfold:
                 outputs.append(self._forward_unfolded(tx.view(T,B,C), incremental_state, query, self.weight_linears[i]))
