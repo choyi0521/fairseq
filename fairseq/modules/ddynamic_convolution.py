@@ -68,6 +68,8 @@ class DDynamicConv1dTBC(nn.Module):
         self.weight_softmax = weight_softmax
         self.renorm_padding = renorm_padding
 
+        self.idx = torch.randperm(input_size)
+
         assert in_proj == False
         assert self.query_size%num_proj_heads==0
         self.weight_linears = nn.ModuleList([
@@ -109,18 +111,18 @@ class DDynamicConv1dTBC(nn.Module):
         H = self.num_heads
         Q = C // G
         R = C // H
-        tx = x.view(T, B, H, R)
+        tx = x
         roll = 3
         outputs = []
         for i in range(G):
             if query is None:
                 query = x
             if unfold:
-                outputs.append(self._forward_unfolded(tx.view(T,B,C), incremental_state, query.narrow(2, i*Q, Q), self.weight_linears[i]))
+                outputs.append(self._forward_unfolded(tx, incremental_state, query.narrow(2, i*Q, Q), self.weight_linears[i]))
             else:
-                outputs.append(self._forward_expanded(tx.view(T,B,C), incremental_state, query.narrow(2, i*Q, Q), self.weight_linears[i]))
+                outputs.append(self._forward_expanded(tx, incremental_state, query.narrow(2, i*Q, Q), self.weight_linears[i]))
             if i < G-1:
-                tx = tx.as_strided(tx.size(), (B*H*R, H*R, R, 1))
+                tx = tx[:,:,self.idx]
 
         output = self.output_linear(torch.stack(outputs, 3)).squeeze(3)
 
