@@ -119,7 +119,8 @@ class DDynamicConv1dTBC(nn.Module):
                 outputs.append(self._forward_unfolded(tx.view(T,B,C), incremental_state, query.narrow(2, i*Q, Q), self.weight_linears[i]))
             else:
                 outputs.append(self._forward_expanded(tx.view(T,B,C), incremental_state, query.narrow(2, i*Q, Q), self.weight_linears[i]))
-            #tx = torch.stack([tx[:, :, :, j].roll(j*roll, 2) for j in range(R)], 3)
+            if i < G-1:
+                tx = tx.as_strided(tx.size(), (B*H*R, H*R, R, 1))
 
         output = self.output_linear(torch.stack(outputs, 3)).squeeze(3)
 
