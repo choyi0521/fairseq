@@ -71,7 +71,6 @@ class DDynamicConv1dTBC(nn.Module):
         self.idxs = [torch.randperm(self.input_size // num_proj_heads) for i in range(num_proj_heads)]
         assert in_proj == False
         self.weight_linear = Linear(self.query_size//self.num_proj_heads, num_proj_heads*num_heads * kernel_size * 1, bias=bias)
-        self.output_linear = Linear(self.input_size, self.input_size)
         if conv_bias:
             self.conv_bias = nn.Parameter(torch.Tensor(input_size))
         else:
@@ -113,7 +112,6 @@ class DDynamicConv1dTBC(nn.Module):
         else:
             output = self._forward_expanded(x, incremental_state, query)
 
-        output = self.output_linear(output.view(T, B, C))
         if self.conv_bias is not None:
             output = output + self.conv_bias.view(1, 1, -1)
         return output
