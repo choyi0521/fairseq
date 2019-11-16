@@ -120,10 +120,9 @@ class DDynamicConv1dTBC(nn.Module):
                 outputs.append(self._forward_unfolded(tx.view(T,B,C), incremental_state, query, self.weight_linears[i]))
             else:
                 outputs.append(self._forward_expanded(tx.view(T,B,C), incremental_state, query, self.weight_linears[i]))
-            print(tx.shape)
-            tx = torch.cat([tx[:,:,:,j].roll(j*roll, 2) for j in range(R)],axis=3)
+            tx = torch.cat([tx[:, :, :, j].roll(j*roll, 2) for j in range(R)], 3)
 
-        output = self.output_linear(torch.cat(outputs, axis=3)).squeeze(3)
+        output = self.output_linear(torch.cat(outputs, 3)).squeeze(3)
 
         if self.conv_bias is not None:
             output = output + self.conv_bias.view(1, 1, -1)
