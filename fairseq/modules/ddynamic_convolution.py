@@ -87,7 +87,7 @@ class DDynamicConv1dTBC(nn.Module):
 
     def reset_parameters(self):
         for i in range(self.num_proj_heads):
-            self.weight_linear[i].reset_parameters()
+            self.weight_linears[i].reset_parameters()
         self.output_linear.reset_parameters()
         if self.conv_bias is not None:
             nn.init.constant_(self.conv_bias, 0.)
