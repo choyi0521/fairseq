@@ -70,7 +70,7 @@ class DDynamicConv1dTBC(nn.Module):
 
         assert in_proj == False
         assert self.query_size%num_proj_heads==0
-        self.weight_linears = nn.ModuelList([
+        self.weight_linears = nn.ModuleList([
             Linear(self.query_size // num_proj_heads, num_heads * kernel_size * 1, bias=bias)
             for i in range(num_proj_heads)])
         self.output_linear = Linear(num_proj_heads, 1)
