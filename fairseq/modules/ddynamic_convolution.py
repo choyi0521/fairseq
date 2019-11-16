@@ -102,7 +102,7 @@ class DDynamicConv1dTBC(nn.Module):
 
         T, B, C = x.size()
         G = self.num_proj_heads
-        Q = C // self.num_proj_heads
+        Q = C // G
         if query is None:
             query = x
         query = query.view(T, B*G, Q)
