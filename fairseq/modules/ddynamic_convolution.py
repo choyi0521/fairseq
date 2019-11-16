@@ -83,7 +83,7 @@ class DDynamicConv1dTBC(nn.Module):
 
     @property
     def in_proj(self):
-        return self.weight_linear.out_features == self.input_size + self.num_heads * self.kernel_size
+        return self.weight_linears[0].out_features == self.input_size + self.num_heads * self.kernel_size
 
     def reset_parameters(self):
         for i in range(self.num_proj_heads):
