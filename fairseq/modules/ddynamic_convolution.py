@@ -68,10 +68,12 @@ class DDynamicConv1dTBC(nn.Module):
         self.weight_softmax = weight_softmax
         self.renorm_padding = renorm_padding
 
+        self.idxs = [torch.randperm(self.input_size // num_proj_heads) for i in range(num_proj_heads)]
         if in_proj:
-            self.weight_linear = Linear(self.num_proj_heads, self.input_size + num_heads * kernel_size * 1)
+            self.weight_linear = Linear(self.input_size//self.num_proj_heads, self.input_size + num_heads * kernel_size * 1)
         else:
-            self.weight_linear = Linear(self.num_proj_heads, num_heads * kernel_size * 1, bias=bias)
+            self.weight_linear = Linear(self.query_size//self.num_proj_heads, num_heads * kernel_size * 1, bias=bias)
+        self.output_linear = Linear(self.input_size, self.input_size)
         if conv_bias:
             self.conv_bias = nn.Parameter(torch.Tensor(input_size))
         else:
@@ -84,6 +86,7 @@ class DDynamicConv1dTBC(nn.Module):
 
     def reset_parameters(self):
         self.weight_linear.reset_parameters()
+        self.output_linear.reset_parameters()
         if self.conv_bias is not None:
             nn.init.constant_(self.conv_bias, 0.)
 
@@ -99,32 +102,35 @@ class DDynamicConv1dTBC(nn.Module):
         unfold = unfold or (incremental_state is not None)
         assert query is None or not self.in_proj
 
+        T, B, C = x.size()
+        G = self.num_proj_heads
+        Q = C // self.num_proj_heads
         if query is None:
             query = x
+        query = query.view(T, B*G, Q)
+        x = x.view(T,B,G,Q)
+        x = torch.cat([x[:,:,i:i+1,self.idxs[i]] for i in range(G)],3).view(T,B*G,Q)
         if unfold:
             output = self._forward_unfolded(x, incremental_state, query)
         else:
             output = self._forward_expanded(x, incremental_state, query)
 
+        output = self.output_linear(output.view(T, B, C))
         if self.conv_bias is not None:
             output = output + self.conv_bias.view(1, 1, -1)
         return output
 
     def _project_weight(self, x, query):
+        assert self.in_proj == False
+        T, B, _ = x.size()
         K, H = self.kernel_size, self.num_heads
         G = self.num_proj_heads
         if self.in_proj:
-            T, B, _ = x.size()
-            Q = self.input_size // G
-            assert Q*G == self.input_size
-            proj = self.weight_linear(x.view(-1, G)).view(T*B, Q, -1).mean(1)
+            proj = self.weight_linear(x)
             x = proj.narrow(2, 0, self.input_size).contiguous()
             weight = proj.narrow(2, self.input_size, H*K).contiguous().view(T*B*H, -1)
         else:
-            T, B, _ = query.size()
-            Q = self.query_size // G
-            assert Q*G == self.query_size
-            weight = self.weight_linear(query.view(-1, G)).view(T*B, Q, -1).mean(1).view(T*B*H, -1)
+            weight = self.weight_linear(query).view(T*B*H, -1)
         return x, weight
 
     def _forward_unfolded(self, x, incremental_state, query):
@@ -133,7 +139,7 @@ class DDynamicConv1dTBC(nn.Module):
         T, B, C = x.size()
         K, H = self.kernel_size, self.num_heads
         R = C // H
-        assert R * H == C == self.input_size
+        assert R * H == C == self.input_size//self.num_proj_heads
 
         x, weight = self._project_weight(x, query)
 
@@ -182,7 +188,7 @@ class DDynamicConv1dTBC(nn.Module):
         T, B, C = x.size()
         K, H = self.kernel_size, self.num_heads
         R = C // H
-        assert R * H == C == self.input_size
+        assert R * H == C == self.input_size//self.num_proj_heads
         x, weight = self._project_weight(x, query)
 
         if not self.renorm_padding:
