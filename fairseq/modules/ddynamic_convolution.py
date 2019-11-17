@@ -98,7 +98,6 @@ class DDynamicConv1dTBC(nn.Module):
         unfold = unfold or (incremental_state is not None)
         assert query is None or not self.in_proj
         assert query is None
-
         T, B, C = x.size()
         G = self.num_proj_heads
         Q = C // G
@@ -137,13 +136,10 @@ class DDynamicConv1dTBC(nn.Module):
         assert not self.renorm_padding or incremental_state is not None
 
         if incremental_state is not None:
+            x = x.view(T, -1, self.input_size)
             input_buffer = self._get_input_buffer(incremental_state)
             if input_buffer is None:
                 input_buffer = x.new()
-            print('---------------')
-            print(input_buffer.size())
-            print(x.size())
-            input_buffer = input_buffer.view(T, B, C, -1)
             print(input_buffer.size())
             x_unfold = torch.cat([input_buffer, x.unsqueeze(3)], dim=3)
             if self.kernel_size > 1:
