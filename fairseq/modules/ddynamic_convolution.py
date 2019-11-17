@@ -97,7 +97,7 @@ class DDynamicConv1dTBC(nn.Module):
         unfold = x.size(0) > 512 if unfold is None else unfold  # use unfold mode as default for long sequence to save memory
         unfold = unfold or (incremental_state is not None)
         assert query is None or not self.in_proj
-
+        assert query is None
         T, B, C = x.size()
         G = self.num_proj_heads
         Q = C // G
