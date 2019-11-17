@@ -140,7 +140,6 @@ class DDynamicConv1dTBC(nn.Module):
             input_buffer = self._get_input_buffer(incremental_state)
             if input_buffer is None:
                 input_buffer = x.new()
-            print(input_buffer.size())
             x_unfold = torch.cat([input_buffer, x.unsqueeze(3)], dim=3)
             if self.kernel_size > 1:
                 self._set_input_buffer(incremental_state, x_unfold[:, :, :, -self.kernel_size+1:])
