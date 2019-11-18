@@ -104,7 +104,9 @@ class DDynamicConv1dTBC(nn.Module):
         if query is None:
             query = x
         query = query.view(T, B*G, Q)
+        print('x shpae:', x.size())
         x = x.view(T,B,G,Q)
+        print('x. shpae:', x.size())
         x = torch.cat([x[:, :, i:i+1, self.idxs[i]] for i in range(G)], 2).view(T, B*G, Q)
         if unfold:
             output = self._forward_unfolded(x, incremental_state, query)
