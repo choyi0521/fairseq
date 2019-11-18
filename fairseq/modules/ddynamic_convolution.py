@@ -69,9 +69,9 @@ class DDynamicConv1dTBC(nn.Module):
         self.renorm_padding = renorm_padding
 
         if in_proj:
-            self.weight_linear = Linear(self.input_size, self.input_size + num_heads * kernel_size * 1)
+            self.weight_linear = Linear(self.input_size//self.num_proj_heads, self.input_size + self.num_proj_heads * num_heads * kernel_size * 1)
         else:
-            self.weight_linear = Linear(self.query_size, num_heads * kernel_size * 1, bias=bias)
+            self.weight_linear = Linear(self.query_size//self.num_proj_heads, self.num_proj_heads * num_heads * kernel_size * 1, bias=bias)
         if conv_bias:
             self.conv_bias = nn.Parameter(torch.Tensor(input_size))
         else:
@@ -116,10 +116,10 @@ class DDynamicConv1dTBC(nn.Module):
         return output
 
     def _do_batch_trick(self, x):
-        return x.view(x.size(0), -1, self.input_size//self.num_proj_heads)
+        return x.view(-1, x.size(1)*self.num_proj_heads, x.size(2)//self.num_proj_heads)
 
     def _reverse_batch_trick(self, x):
-        return x.view(x.size(0), -1, self.input_size)
+        return x.view(-1, x.size(1)//self.num_proj_heads, x.size(2)*self.num_proj_heads)
 
     def _project_weight(self, x, query):
         T, B, _ = x.size()
@@ -135,8 +135,8 @@ class DDynamicConv1dTBC(nn.Module):
     def _forward_unfolded(self, x, incremental_state, query):
         '''The conventional implementation of convolutions.
         Unfolding the input by having a window shifting to the right.'''
-        x, weight = self._project_weight(x, query)
         x = self._do_batch_trick(x)
+        x, weight = self._project_weight(x, self._do_batch_trick(query))
         T, B, C = x.size()
         K, H = self.kernel_size, self.num_heads
         R = C // H
@@ -183,8 +183,8 @@ class DDynamicConv1dTBC(nn.Module):
         This is faster when the sequence is short, but less memory efficient.
         This is not used in the decoder during inference.
         '''
-        x, weight = self._project_weight(x, query)
         x = self._do_batch_trick(x)
+        x, weight = self._project_weight(x, self._do_batch_trick(query))
         T, B, C = x.size()
         K, H = self.kernel_size, self.num_heads
         R = C // H
