@@ -99,6 +99,11 @@ class DDynamicConv1dTBC(nn.Module):
         unfold = unfold or (incremental_state is not None)
         assert query is None or not self.in_proj
 
+        _, _, C = x.size()
+        H = self.num_heads
+        R = C // H
+        assert R * H == C == self.input_size
+
         if query is None:
             query = x
         if unfold:
@@ -110,20 +115,31 @@ class DDynamicConv1dTBC(nn.Module):
             output = output + self.conv_bias.view(1, 1, -1)
         return output
 
-    def _forward_unfolded(self, x, incremental_state, query):
-        '''The conventional implementation of convolutions.
-        Unfolding the input by having a window shifting to the right.'''
-        T, B, C = x.size()
-        K, H = self.kernel_size, self.num_heads
-        R = C // H
-        assert R * H == C == self.input_size
+    def _do_batch_trick(self, x):
+        return x.view(x.size(0), -1, self.input_size//self.num_proj_heads)
 
+    def _reverse_batch_trick(self, x):
+        return x.view(x.size(0), -1, self.input_size)
+
+    def _project_weight(self, x, query):
+        T, B, _ = x.size()
+        K, H = self.kernel_size, self.num_heads
         if self.in_proj:
             proj = self.weight_linear(x)
             x = proj.narrow(2, 0, self.input_size).contiguous()
             weight = proj.narrow(2, self.input_size, H*K).contiguous().view(T*B*H, -1)
         else:
             weight = self.weight_linear(query).view(T*B*H, -1)
+        return x, weight
+
+    def _forward_unfolded(self, x, incremental_state, query):
+        '''The conventional implementation of convolutions.
+        Unfolding the input by having a window shifting to the right.'''
+        x, weight = self._project_weight(x, query)
+        x = self._do_batch_trick(x)
+        T, B, C = x.size()
+        K, H = self.kernel_size, self.num_heads
+        R = C // H
 
         # renorm_padding is only implemented in _forward_expanded
         assert not self.renorm_padding or incremental_state is not None
@@ -132,7 +148,7 @@ class DDynamicConv1dTBC(nn.Module):
             input_buffer = self._get_input_buffer(incremental_state)
             if input_buffer is None:
                 input_buffer = x.new()
-            x_unfold = torch.cat([input_buffer, x.unsqueeze(3)], dim=3)
+            x_unfold = torch.cat([input_buffer, self._reverse_batch_trick(x).unsqueeze(3)], dim=3)
             if self.kernel_size > 1:
                 self._set_input_buffer(incremental_state, x_unfold[:, :, :, -self.kernel_size+1:])
             x_unfold = x_unfold.view(T*B*H, R, -1)
@@ -159,7 +175,7 @@ class DDynamicConv1dTBC(nn.Module):
         weight = F.dropout(weight, self.weight_dropout, training=self.training, inplace=False)
 
         output = torch.bmm(x_unfold, weight.unsqueeze(2))  # T*B*H x R x 1
-        output = output.view(T, B, C)
+        output = self._reverse_batch_trick(output.view(T, B, C))
         return output
 
     def _forward_expanded(self, x, incremental_stat, query):
@@ -167,16 +183,11 @@ class DDynamicConv1dTBC(nn.Module):
         This is faster when the sequence is short, but less memory efficient.
         This is not used in the decoder during inference.
         '''
+        x, weight = self._project_weight(x, query)
+        x = self._do_batch_trick(x)
         T, B, C = x.size()
         K, H = self.kernel_size, self.num_heads
         R = C // H
-        assert R * H == C == self.input_size
-        if self.in_proj:
-            proj = self.weight_linear(x)
-            x = proj.narrow(2, 0, self.input_size).contiguous()
-            weight = proj.narrow(2, self.input_size, H*K).contiguous().view(T*B*H, -1)
-        else:
-            weight = self.weight_linear(query).view(T*B*H, -1)
 
         if not self.renorm_padding:
             if self.weight_softmax:
@@ -205,7 +216,7 @@ class DDynamicConv1dTBC(nn.Module):
             weight_expanded.as_strided((B*H, T, K), (T*(T+K-1), T+K, 1)).copy_(weight)
             weight_expanded = weight_expanded.narrow(2, P, T)  # B*H x T x T
         output = torch.bmm(weight_expanded, x)
-        output = output.transpose(0, 1).contiguous().view(T, B, C)
+        output = self._reverse_batch_trick(output.transpose(0, 1).contiguous().view(T, B, C))
         return output
 
     def reorder_incremental_state(self, incremental_state, new_order):
