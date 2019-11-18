@@ -136,10 +136,13 @@ class DDynamicConv1dTBC(nn.Module):
         assert not self.renorm_padding or incremental_state is not None
 
         if incremental_state is not None:
-            x = x.view(T, -1, self.input_size)
+            #x = x.view(T, -1, self.input_size)
             input_buffer = self._get_input_buffer(incremental_state)
             if input_buffer is None:
                 input_buffer = x.new()
+            print('----------------')
+            print(input_buffer.size())
+            print(x.size())
             x_unfold = torch.cat([input_buffer, x.unsqueeze(3)], dim=3)
             if self.kernel_size > 1:
                 self._set_input_buffer(incremental_state, x_unfold[:, :, :, -self.kernel_size+1:])
