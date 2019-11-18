@@ -30,7 +30,7 @@ def Linear(in_features, out_features, bias=True):
 
 
 class DDynamicConv1dTBC(nn.Module):
-    '''Dynamic Dynamic lightweight convolution taking T x B x C inputs
+    '''Dynamic lightweight convolution taking T x B x C inputs
     Args:
         input_size: # of channels of the input
         kernel_size: convolution channels
@@ -69,9 +69,9 @@ class DDynamicConv1dTBC(nn.Module):
         self.renorm_padding = renorm_padding
 
         if in_proj:
-            self.weight_linear = Linear(self.num_proj_heads, self.input_size + num_heads * kernel_size * 1)
+            self.weight_linear = Linear(self.input_size, self.input_size + num_heads * kernel_size * 1)
         else:
-            self.weight_linear = Linear(self.num_proj_heads, num_heads * kernel_size * 1, bias=bias)
+            self.weight_linear = Linear(self.query_size, num_heads * kernel_size * 1, bias=bias)
         if conv_bias:
             self.conv_bias = nn.Parameter(torch.Tensor(input_size))
         else:
@@ -110,23 +110,6 @@ class DDynamicConv1dTBC(nn.Module):
             output = output + self.conv_bias.view(1, 1, -1)
         return output
 
-    def _project_weight(self, x, query):
-        K, H = self.kernel_size, self.num_heads
-        G = self.num_proj_heads
-        if self.in_proj:
-            T, B, _ = x.size()
-            Q = self.input_size // G
-            assert Q*G == self.input_size
-            proj = self.weight_linear(x.view(-1, G)).view(T*B, Q, -1).mean(1)
-            x = proj.narrow(2, 0, self.input_size).contiguous()
-            weight = proj.narrow(2, self.input_size, H*K).contiguous().view(T*B*H, -1)
-        else:
-            T, B, _ = query.size()
-            Q = self.query_size // G
-            assert Q*G == self.query_size
-            weight = self.weight_linear(query.view(-1, G)).view(T*B, Q, -1).mean(1).view(T*B*H, -1)
-        return x, weight
-
     def _forward_unfolded(self, x, incremental_state, query):
         '''The conventional implementation of convolutions.
         Unfolding the input by having a window shifting to the right.'''
@@ -135,7 +118,12 @@ class DDynamicConv1dTBC(nn.Module):
         R = C // H
         assert R * H == C == self.input_size
 
-        x, weight = self._project_weight(x, query)
+        if self.in_proj:
+            proj = self.weight_linear(x)
+            x = proj.narrow(2, 0, self.input_size).contiguous()
+            weight = proj.narrow(2, self.input_size, H*K).contiguous().view(T*B*H, -1)
+        else:
+            weight = self.weight_linear(query).view(T*B*H, -1)
 
         # renorm_padding is only implemented in _forward_expanded
         assert not self.renorm_padding or incremental_state is not None
@@ -183,7 +171,12 @@ class DDynamicConv1dTBC(nn.Module):
         K, H = self.kernel_size, self.num_heads
         R = C // H
         assert R * H == C == self.input_size
-        x, weight = self._project_weight(x, query)
+        if self.in_proj:
+            proj = self.weight_linear(x)
+            x = proj.narrow(2, 0, self.input_size).contiguous()
+            weight = proj.narrow(2, self.input_size, H*K).contiguous().view(T*B*H, -1)
+        else:
+            weight = self.weight_linear(query).view(T*B*H, -1)
 
         if not self.renorm_padding:
             if self.weight_softmax:
