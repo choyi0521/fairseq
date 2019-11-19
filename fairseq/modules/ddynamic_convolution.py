@@ -240,9 +240,9 @@ class DDynamicConv1dTBC(nn.Module):
         return utils.set_incremental_state(self, incremental_state, 'input_buffer', new_buffer)
 
     def extra_repr(self):
-        s = '{}, kernel_size={}, padding_l={}, num_heads={}, num_proj_heads={}, weight_softmax={}, conv_bias={}, renorm_padding={}, in_proj={}'.format(
+        s = '{}, kernel_size={}, padding_l={}, num_heads={}, num_proj_heads={}, conv_mixed={}, weight_softmax={}, conv_bias={}, renorm_padding={}, in_proj={}'.format(
             self.input_size, self.kernel_size, self.padding_l,
-            self.num_heads, self.num_proj_heads, self.weight_softmax, self.conv_bias is not None, self.renorm_padding,
+            self.num_heads, self.num_proj_heads, self.conv_mixed, self.weight_softmax, self.conv_bias is not None, self.renorm_padding,
             self.in_proj,
         )
 
