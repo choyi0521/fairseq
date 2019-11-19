@@ -70,7 +70,7 @@ class DDynamicConv1dTBC(nn.Module):
         self.renorm_padding = renorm_padding
 
         if conv_mixed:
-            self.perm = nn.parameter(torch.randperm(input_size), requires_grad=False)
+            self.perm = nn.Parameter(torch.randperm(input_size), requires_grad=False)
 
         if in_proj:
             self.weight_linear = Linear(self.input_size//self.num_proj_heads, self.input_size + self.num_proj_heads * num_heads * kernel_size * 1)
