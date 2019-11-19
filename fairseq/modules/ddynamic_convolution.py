@@ -11,12 +11,12 @@ from fairseq import utils
 from .unfold import unfold1d
 
 
-def DDynamicConv(input_size, kernel_size=1, padding_l=None, num_heads=1, num_proj_heads=1,
+def DDynamicConv(input_size, kernel_size=1, padding_l=None, num_heads=1, num_proj_heads=1, conv_mixed=False,
                 weight_dropout=0., weight_softmax=False,
                 renorm_padding=False, bias=False, conv_bias=False,
                 query_size=None, in_proj=False):
     return DDynamicConv1dTBC(input_size, kernel_size=kernel_size,
-                            padding_l=padding_l, num_heads=num_heads, num_proj_heads=num_proj_heads,
+                            padding_l=padding_l, num_heads=num_heads, num_proj_heads=num_proj_heads, conv_mixed=conv_mixed,
                             weight_dropout=weight_dropout,
                             weight_softmax=weight_softmax, bias=bias)
 
@@ -53,7 +53,7 @@ class DDynamicConv1dTBC(nn.Module):
             `(num_heads, 1, kernel_size)`
         bias:   the learnable bias of the module of shape `(input_size)`
     '''
-    def __init__(self, input_size, kernel_size=1, padding_l=None, num_heads=1, num_proj_heads=1,
+    def __init__(self, input_size, kernel_size=1, padding_l=None, num_heads=1, num_proj_heads=1, conv_mixed=False,
                  weight_dropout=0., weight_softmax=False,
                  renorm_padding=False, bias=False, conv_bias=False,
                  query_size=None, in_proj=False):
@@ -64,9 +64,13 @@ class DDynamicConv1dTBC(nn.Module):
         self.padding_l = padding_l
         self.num_heads = num_heads
         self.num_proj_heads = num_proj_heads
+        self.conv_mixed = conv_mixed
         self.weight_dropout = weight_dropout
         self.weight_softmax = weight_softmax
         self.renorm_padding = renorm_padding
+
+        if conv_mixed:
+            self.perm = nn.parameter(torch.randperm(input_size), requires_grad=False)
 
         if in_proj:
             self.weight_linear = Linear(self.input_size//self.num_proj_heads, self.input_size + self.num_proj_heads * num_heads * kernel_size * 1)
@@ -135,6 +139,8 @@ class DDynamicConv1dTBC(nn.Module):
     def _forward_unfolded(self, x, incremental_state, query):
         '''The conventional implementation of convolutions.
         Unfolding the input by having a window shifting to the right.'''
+        if self.conv_mixed:
+            x = x[:, :, self.perm]
         x = self._do_batch_trick(x)
         x, weight = self._project_weight(x, self._do_batch_trick(query))
         T, B, C = x.size()
@@ -183,6 +189,8 @@ class DDynamicConv1dTBC(nn.Module):
         This is faster when the sequence is short, but less memory efficient.
         This is not used in the decoder during inference.
         '''
+        if self.conv_mixed:
+            x = x[:, :, self.perm]
         x = self._do_batch_trick(x)
         x, weight = self._project_weight(x, self._do_batch_trick(query))
         T, B, C = x.size()

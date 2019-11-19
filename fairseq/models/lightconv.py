@@ -109,6 +109,7 @@ class LightConvModel(FairseqEncoderDecoderModel):
                                  'Must be used with adaptive_loss criterion'),
         parser.add_argument('--adaptive-softmax-dropout', type=float, metavar='D',
                             help='sets adaptive softmax dropout for the tail projections')
+        parser.add_argument('--conv-mixed', type=options.eval_bool)
 
         """LightConv and DynamicConv arguments"""
         parser.add_argument('--encoder-kernel-size-list', type=lambda x: options.eval_str_list(x, int),
@@ -467,6 +468,7 @@ class LightConvEncoderLayer(nn.Module):
                                     weight_softmax=args.weight_softmax,
                                     num_heads=args.encoder_attention_heads,
                                     num_proj_heads=args.encoder_attention_proj_heads,
+                                    conv_mixed=args.conv_mixed,
                                     weight_dropout=args.weight_dropout)
         else:
             raise NotImplementedError
@@ -561,6 +563,7 @@ class LightConvDecoderLayer(nn.Module):
                                     weight_softmax=args.weight_softmax,
                                     num_heads=args.decoder_attention_heads,
                                     num_proj_heads=args.decoder_attention_proj_heads,
+                                    conv_mixed=args.conv_mixed,
                                     weight_dropout=args.weight_dropout)
         else:
             raise NotImplementedError
@@ -723,6 +726,7 @@ def base_architecture(args):
     assert len(args.decoder_kernel_size_list) == args.decoder_layers, "decoder_kernel_size_list doesn't match decoder_layers"
     args.encoder_glu = getattr(args, 'encoder_glu', True)
     args.decoder_glu = getattr(args, 'decoder_glu', True)
+    args.conv_mixed = getattr(args, 'conv_mixed', False)
     args.input_dropout = getattr(args, 'input_dropout', 0.1)
     args.weight_dropout = getattr(args, 'weight_dropout', args.attention_dropout)
 
@@ -743,6 +747,7 @@ def lightconv_iwslt_de_en(args):
     args.weight_dropout = getattr(args, 'weight_dropout', 0.1)
     args.encoder_glu = getattr(args, 'encoder_glu', False)
     args.decoder_glu = getattr(args, 'decoder_glu', False)
+    args.conv_mixed = getattr(args, 'conv_mixed', False)
     args.input_dropout = getattr(args, 'input_dropout', 0.0)
     base_architecture(args)
 
