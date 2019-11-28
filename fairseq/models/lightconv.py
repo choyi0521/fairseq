@@ -120,6 +120,10 @@ class LightConvModel(FairseqEncoderDecoderModel):
                             help='glu after in proj')
         parser.add_argument('--decoder-glu', type=options.eval_bool,
                             help='glu after in proj')
+        parser.add_argument('--encoder-gau', type=options.eval_bool,
+                            help='gau after in proj')
+        parser.add_argument('--decoder-gau', type=options.eval_bool,
+                            help='gau after in proj')
         parser.add_argument('--encoder-conv-type', default='dynamic', type=str,
                             choices=['dynamic', 'lightweight', 'ddynamic'],
                             help='type of convolution')
@@ -447,7 +451,14 @@ class LightConvEncoderLayer(nn.Module):
         self.conv_dim = args.encoder_conv_dim
         padding_l = kernel_size // 2 if kernel_size % 2 == 1 else ((kernel_size - 1) // 2, kernel_size // 2)
 
-        if args.encoder_glu:
+        self.gau = False
+        if args.encoder_gau:
+            self.gau = True
+            self.linear_gate_tanh = Linear(self.embed_dim, self.conv_dim)
+            self.linear_gate_sigmoid = Linear(self.embed_dim, self.conv_dim)
+            self.gate_tanh = torch.nn.Tanh()
+            self.gate_sigmoid = torch.nn.Sigmoid()
+        elif args.encoder_glu:
             self.linear1 = Linear(self.embed_dim, 2*self.conv_dim)
             self.act = nn.GLU()
         else:
@@ -495,9 +506,12 @@ class LightConvEncoderLayer(nn.Module):
         residual = x
         x = self.maybe_layer_norm(0, x, before=True)
         x = F.dropout(x, p=self.input_dropout, training=self.training)
-        x = self.linear1(x)
-        if self.act is not None:
-            x = self.act(x)
+        if self.gau:
+            x = self.gate_tanh(self.linear_gate_tanh(x)) * self.gate_sigmoid(self.linear_gate_sigmoid(x))
+        else:
+            x = self.linear1(x)
+            if self.act is not None:
+                x = self.act(x)
         if encoder_padding_mask is not None:
             x = x.masked_fill(encoder_padding_mask.transpose(0, 1).unsqueeze(2), 0)
         x = self.conv(x)
@@ -542,7 +556,15 @@ class LightConvDecoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = args.decoder_embed_dim
         self.conv_dim = args.decoder_conv_dim
-        if args.decoder_glu:
+
+        self.gau = False
+        if args.decoder_gau:
+            self.gau = True
+            self.linear_gate_tanh = Linear(self.embed_dim, self.conv_dim)
+            self.linear_gate_sigmoid = Linear(self.embed_dim, self.conv_dim)
+            self.gate_tanh = torch.nn.Tanh()
+            self.gate_sigmoid = torch.nn.Sigmoid()
+        elif args.decoder_glu:
             self.linear1 = Linear(self.embed_dim, 2*self.conv_dim)
             self.act = nn.GLU()
         else:
@@ -611,9 +633,12 @@ class LightConvDecoderLayer(nn.Module):
                 incremental_state = {}
             self.conv._set_input_buffer(incremental_state, prev_conv_state)
         x = F.dropout(x, p=self.input_dropout, training=self.training)
-        x = self.linear1(x)
-        if self.act is not None:
-            x = self.act(x)
+        if self.gau:
+            x = self.gate_tanh(self.linear_gate_tanh(x)) * self.gate_sigmoid(self.linear_gate_sigmoid(x))
+        else:
+            x = self.linear1(x)
+            if self.act is not None:
+                x = self.act(x)
         x = self.conv(x, incremental_state=incremental_state)
         x = self.linear2(x)
         x = F.dropout(x, p=self.dropout, training=self.training)
@@ -726,6 +751,8 @@ def base_architecture(args):
     assert len(args.decoder_kernel_size_list) == args.decoder_layers, "decoder_kernel_size_list doesn't match decoder_layers"
     args.encoder_glu = getattr(args, 'encoder_glu', True)
     args.decoder_glu = getattr(args, 'decoder_glu', True)
+    args.encoder_gau = getattr(args, 'encoder_gau', False)
+    args.decoder_gau = getattr(args, 'decoder_gau', False)
     args.conv_mixed = getattr(args, 'conv_mixed', False)
     args.input_dropout = getattr(args, 'input_dropout', 0.1)
     args.weight_dropout = getattr(args, 'weight_dropout', args.attention_dropout)
