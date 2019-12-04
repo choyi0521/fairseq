@@ -77,7 +77,7 @@ class LightConvModel(FairseqEncoderDecoderModel):
                             help='num encoder layers')
         parser.add_argument('--encoder-attention-heads', type=int, metavar='N',
                             help='num encoder attention heads or LightConv/DynamicConv heads')
-        parser.add_argument('--encoder-attention-proj-heads', type=int, metavar='N',
+        parser.add_argument('--encoder-attention-query-heads', type=int, metavar='N',
                             help='num encoder attention proj heads or LightConv/DynamicConv proj heads')
         parser.add_argument('--encoder-normalize-before', action='store_true',
                             help='apply layernorm before each encoder block')
@@ -97,7 +97,7 @@ class LightConvModel(FairseqEncoderDecoderModel):
                             help='num decoder layers')
         parser.add_argument('--decoder-attention-heads', type=int, metavar='N',
                             help='num decoder attention heads or LightConv/DynamicConv heads')
-        parser.add_argument('--decoder-attention-proj-heads', type=int, metavar='N',
+        parser.add_argument('--decoder-attention-query-heads', type=int, metavar='N',
                             help='num decoder attention proj heads or LightConv/DynamicConv proj heads')
         parser.add_argument('--decoder-learned-pos', action='store_true',
                             help='use learned positional embeddings in the decoder')
