@@ -69,6 +69,8 @@ class LightConvModel(FairseqEncoderDecoderModel):
                             help='encoder embedding dimension')
         parser.add_argument('--encoder-conv-dim', type=int, metavar='N',
                             help='encoder embedding dimension')
+        parser.add_argument('--encoder-query-dim', type=int, metavar='N',
+                            help='encoder embedding dimension')
         parser.add_argument('--encoder-ffn-embed-dim', type=int, metavar='N',
                             help='encoder embedding dimension for FFN')
         parser.add_argument('--encoder-layers', type=int, metavar='N',
@@ -86,6 +88,8 @@ class LightConvModel(FairseqEncoderDecoderModel):
         parser.add_argument('--decoder-embed-dim', type=int, metavar='N',
                             help='decoder embedding dimension')
         parser.add_argument('--decoder-conv-dim', type=int, metavar='N',
+                            help='decoder embedding dimension')
+        parser.add_argument('--decoder-query-dim', type=int, metavar='N',
                             help='decoder embedding dimension')
         parser.add_argument('--decoder-ffn-embed-dim', type=int, metavar='N',
                             help='decoder embedding dimension for FFN')
@@ -449,20 +453,27 @@ class LightConvEncoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = args.encoder_embed_dim
         self.conv_dim = args.encoder_conv_dim
+        self.query_dim = args.encoder_query_dim
         padding_l = kernel_size // 2 if kernel_size % 2 == 1 else ((kernel_size - 1) // 2, kernel_size // 2)
+
+        assert args.encoder_conv_type == 'ddynamic'
 
         self.gau = False
         if args.encoder_gau:
             self.gau = True
             self.linear_gate_tanh = Linear(self.embed_dim, self.conv_dim)
             self.linear_gate_sigmoid = Linear(self.embed_dim, self.conv_dim)
+            self.linear_query_gate_tanh = Linear(self.embed_dim, self.query_dim)
+            self.linear_query_gate_sigmoid = Linear(self.embed_dim, self.query_dim)
             self.gate_tanh = torch.nn.Tanh()
             self.gate_sigmoid = torch.nn.Sigmoid()
         elif args.encoder_glu:
             self.linear1 = Linear(self.embed_dim, 2*self.conv_dim)
+            self.linear1_query = Linear(self.embed_dim, 2*self.query_dim)
             self.act = nn.GLU()
         else:
             self.linear1 = Linear(self.embed_dim, self.conv_dim)
+            self.linear1_query = Linear(self.embed_dim, self.query_dim)
             self.act = None
         if args.encoder_conv_type == 'lightweight':
             self.conv = LightweightConv(self.conv_dim, kernel_size, padding_l=padding_l,
@@ -477,8 +488,9 @@ class LightConvEncoderLayer(nn.Module):
         elif args.encoder_conv_type == 'ddynamic':
             self.conv = DDynamicConv(self.conv_dim, kernel_size, padding_l=padding_l,
                                     weight_softmax=args.weight_softmax,
+                                    query_size=self.query_dim,
                                     num_heads=args.encoder_attention_heads,
-                                    num_proj_heads=args.encoder_attention_proj_heads,
+                                    num_proj_heads=args.encoder_attention_query_heads,
                                     conv_mixed=args.conv_mixed,
                                     weight_dropout=args.weight_dropout)
         else:
@@ -506,15 +518,19 @@ class LightConvEncoderLayer(nn.Module):
         residual = x
         x = self.maybe_layer_norm(0, x, before=True)
         x = F.dropout(x, p=self.input_dropout, training=self.training)
+        query = x
         if self.gau:
             x = self.gate_tanh(self.linear_gate_tanh(x)) * self.gate_sigmoid(self.linear_gate_sigmoid(x))
+            query = self.gate_tanh(self.linear_query_gate_tanh(query)) * self.gate_sigmoid(self.linear_query_gate_sigmoid(query))
         else:
             x = self.linear1(x)
+            query = self.linear1_query(query)
             if self.act is not None:
                 x = self.act(x)
+                query = self.act(query)
         if encoder_padding_mask is not None:
             x = x.masked_fill(encoder_padding_mask.transpose(0, 1).unsqueeze(2), 0)
-        x = self.conv(x)
+        x = self.conv(x, query=query)
         x = self.linear2(x)
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
@@ -556,19 +572,26 @@ class LightConvDecoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = args.decoder_embed_dim
         self.conv_dim = args.decoder_conv_dim
+        self.query_dim = args.decoder_query_dim
+
+        assert args.decoder_conv_type == 'ddynamic'
 
         self.gau = False
-        if args.decoder_gau:
+        if args.encoder_gau:
             self.gau = True
             self.linear_gate_tanh = Linear(self.embed_dim, self.conv_dim)
             self.linear_gate_sigmoid = Linear(self.embed_dim, self.conv_dim)
+            self.linear_query_gate_tanh = Linear(self.embed_dim, self.query_dim)
+            self.linear_query_gate_sigmoid = Linear(self.embed_dim, self.query_dim)
             self.gate_tanh = torch.nn.Tanh()
             self.gate_sigmoid = torch.nn.Sigmoid()
-        elif args.decoder_glu:
+        elif args.encoder_glu:
             self.linear1 = Linear(self.embed_dim, 2*self.conv_dim)
+            self.linear1_query = Linear(self.embed_dim, 2*self.query_dim)
             self.act = nn.GLU()
         else:
             self.linear1 = Linear(self.embed_dim, self.conv_dim)
+            self.linear1_query = Linear(self.embed_dim, self.query_dim)
             self.act = None
         if args.decoder_conv_type == 'lightweight':
             self.conv = LightweightConv(self.conv_dim, kernel_size, padding_l=kernel_size-1,
@@ -583,8 +606,9 @@ class LightConvDecoderLayer(nn.Module):
         elif args.decoder_conv_type == 'ddynamic':
             self.conv = DDynamicConv(self.conv_dim, kernel_size, padding_l=kernel_size-1,
                                     weight_softmax=args.weight_softmax,
+                                    query_size=self.query_dim,
                                     num_heads=args.decoder_attention_heads,
-                                    num_proj_heads=args.decoder_attention_proj_heads,
+                                    num_proj_heads=args.decoder_attention_query_heads,
                                     conv_mixed=args.conv_mixed,
                                     weight_dropout=args.weight_dropout)
         else:
@@ -633,13 +657,18 @@ class LightConvDecoderLayer(nn.Module):
                 incremental_state = {}
             self.conv._set_input_buffer(incremental_state, prev_conv_state)
         x = F.dropout(x, p=self.input_dropout, training=self.training)
+
+        query = x
         if self.gau:
             x = self.gate_tanh(self.linear_gate_tanh(x)) * self.gate_sigmoid(self.linear_gate_sigmoid(x))
+            query = self.gate_tanh(self.linear_query_gate_tanh(query)) * self.gate_sigmoid(self.linear_query_gate_sigmoid(query))
         else:
             x = self.linear1(x)
+            query = self.linear1_query(query)
             if self.act is not None:
                 x = self.act(x)
-        x = self.conv(x, incremental_state=incremental_state)
+                query = self.act(query)
+        x = self.conv(x, query=query, incremental_state=incremental_state)
         x = self.linear2(x)
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
@@ -712,18 +741,20 @@ def Linear(in_features, out_features, bias=True):
 def base_architecture(args):
     args.encoder_embed_path = getattr(args, 'encoder_embed_path', None)
     args.encoder_embed_dim = getattr(args, 'encoder_embed_dim', 512)
+    args.encoder_query_dim = getattr(args, 'encoder_embed_dim', 512)
     args.encoder_ffn_embed_dim = getattr(args, 'encoder_ffn_embed_dim', 2048)
     args.encoder_layers = getattr(args, 'encoder_layers', 7)
     args.encoder_attention_heads = getattr(args, 'encoder_attention_heads', 8)
-    args.encoder_attention_proj_heads = getattr(args, 'encoder_attention_proj_heads', 64)
+    args.encoder_attention_query_heads = getattr(args, 'encoder_attention_query_heads', 64)
     args.encoder_normalize_before = getattr(args, 'encoder_normalize_before', False)
     args.encoder_learned_pos = getattr(args, 'encoder_learned_pos', False)
     args.decoder_embed_path = getattr(args, 'decoder_embed_path', None)
     args.decoder_embed_dim = getattr(args, 'decoder_embed_dim', args.encoder_embed_dim)
+    args.decoder_query_dim = getattr(args, 'decoder_query_dim', args.encoder_query_dim)
     args.decoder_ffn_embed_dim = getattr(args, 'decoder_ffn_embed_dim', args.encoder_ffn_embed_dim)
     args.decoder_layers = getattr(args, 'decoder_layers', 6)
     args.decoder_attention_heads = getattr(args, 'decoder_attention_heads', 8)
-    args.decoder_attention_proj_heads = getattr(args, 'decoder_attention_proj_heads', 64)
+    args.decoder_attention_query_heads = getattr(args, 'decoder_attention_query_heads', 64)
     args.decoder_normalize_before = getattr(args, 'decoder_normalize_before', False)
     args.decoder_learned_pos = getattr(args, 'decoder_learned_pos', False)
     args.attention_dropout = getattr(args, 'attention_dropout', 0.)
@@ -763,12 +794,12 @@ def lightconv_iwslt_de_en(args):
     args.encoder_embed_dim = getattr(args, 'encoder_embed_dim', 512)
     args.encoder_ffn_embed_dim = getattr(args, 'encoder_ffn_embed_dim', 1024)
     args.encoder_attention_heads = getattr(args, 'encoder_attention_heads', 4)
-    args.encoder_attention_proj_heads = getattr(args, 'encoder_attention_proj_heads', 128)
+    args.encoder_attention_query_heads = getattr(args, 'encoder_attention_query_heads', 128)
     args.encoder_layers = getattr(args, 'encoder_layers', 7)
     args.decoder_embed_dim = getattr(args, 'decoder_embed_dim', 512)
     args.decoder_ffn_embed_dim = getattr(args, 'decoder_ffn_embed_dim', 1024)
     args.decoder_attention_heads = getattr(args, 'decoder_attention_heads', 4)
-    args.decoder_attention_proj_heads = getattr(args, 'decoder_attention_proj_heads', 128)
+    args.decoder_attention_query_heads = getattr(args, 'decoder_attention_query_heads', 128)
     args.decoder_layers = getattr(args, 'decoder_layers', 6)
     args.attention_dropout = getattr(args, 'attention_dropout', 0.1)
     args.weight_dropout = getattr(args, 'weight_dropout', 0.1)

@@ -15,7 +15,7 @@ def DDynamicConv(input_size, kernel_size=1, padding_l=None, num_heads=1, num_pro
                 weight_dropout=0., weight_softmax=False,
                 renorm_padding=False, bias=False, conv_bias=False,
                 query_size=None, in_proj=False):
-    return DDynamicConv1dTBC(input_size, kernel_size=kernel_size,
+    return DDynamicConv1dTBC(input_size, query_size=query_size, kernel_size=kernel_size,
                             padding_l=padding_l, num_heads=num_heads, num_proj_heads=num_proj_heads, conv_mixed=conv_mixed,
                             weight_dropout=weight_dropout,
                             weight_softmax=weight_softmax, bias=bias)
