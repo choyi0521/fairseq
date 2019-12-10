@@ -25,15 +25,6 @@ fb_pathmgr_registerd = False
 def main(args, init_distributed=False):
     utils.import_user_module(args)
 
-    try:
-        from fairseq.fb_pathmgr import fb_pathmgr
-        global fb_pathmgr_registerd
-        if not fb_pathmgr_registerd:
-            fb_pathmgr.register()
-            fb_pathmgr_registerd = True
-    except (ModuleNotFoundError, ImportError):
-        pass
-
     assert args.max_tokens is not None or args.max_sentences is not None, \
         'Must specify batch size either with --max-tokens or --max-sentences'
 
@@ -45,11 +36,11 @@ def main(args, init_distributed=False):
     if init_distributed:
         args.distributed_rank = distributed_utils.distributed_init(args)
 
-    if distributed_utils.is_master(args):
-        checkpoint_utils.verify_checkpoint_directory(args.save_dir)
+    # if distributed_utils.is_master(args):
+    #    checkpoint_utils.verify_checkpoint_directory(args.save_dir)
 
     # Print args
-    print(args)
+    # print(args)
 
     # Setup task, e.g., translation, language modeling, etc.
     task = tasks.setup_task(args)
@@ -61,27 +52,28 @@ def main(args, init_distributed=False):
     # Build model and criterion
     model = task.build_model(args)
     criterion = task.build_criterion(args)
-    print(model)
-    print('| model {}, criterion {}'.format(args.arch, criterion.__class__.__name__))
-    print('| num. model params: {} (num. trained: {})'.format(
-        sum(p.numel() for p in model.parameters()),
-        sum(p.numel() for p in model.parameters() if p.requires_grad),
-    ))
+    # print(model)
+    # print('| model {}, criterion {}'.format(args.arch, criterion.__class__.__name__))
+    # print('| num. model params: {} (num. trained: {})'.format(
+    #     sum(p.numel() for p in model.parameters()),
+    #     sum(p.numel() for p in model.parameters() if p.requires_grad),
+    # ))
 
     # Build trainer
     trainer = Trainer(args, task, model, criterion)
-    print('| training on {} GPUs'.format(args.distributed_world_size))
-    print('| max tokens per GPU = {} and max sentences per GPU = {}'.format(
-        args.max_tokens,
-        args.max_sentences,
-    ))
+    # print('| training on {} GPUs'.format(args.distributed_world_size))
+    # print('| max tokens per GPU = {} and max sentences per GPU = {}'.format(
+    #     args.max_tokens,
+    #     args.max_sentences,
+    # ))
 
     # Load the latest checkpoint if one is available and restore the
     # corresponding train iterator
     extra_state, epoch_itr = checkpoint_utils.load_checkpoint(args, trainer)
-
+    
     # Train until the learning rate gets too small
-    max_epoch = args.max_epoch or math.inf
+    # max_epoch = args.max_epoch or math.inf
+    max_epoch = 3
     max_update = args.max_update or math.inf
     lr = trainer.get_lr()
     train_meter = StopwatchMeter()
@@ -89,8 +81,9 @@ def main(args, init_distributed=False):
     valid_subsets = args.valid_subset.split(',')
     while lr > args.min_lr and epoch_itr.epoch < max_epoch and trainer.get_num_updates() < max_update:
         # train for one epoch
+        
         train(args, trainer, task, epoch_itr)
-
+        
         if not args.disable_validation and epoch_itr.epoch % args.validate_interval == 0:
             valid_losses = validate(args, trainer, task, epoch_itr, valid_subsets)
         else:
@@ -100,14 +93,14 @@ def main(args, init_distributed=False):
         lr = trainer.lr_step(epoch_itr.epoch, valid_losses[0])
 
         # save checkpoint
-        if epoch_itr.epoch % args.save_interval == 0:
-            checkpoint_utils.save_checkpoint(args, trainer, epoch_itr, valid_losses[0])
+        # if epoch_itr.epoch % args.save_interval == 0:
+        #     checkpoint_utils.save_checkpoint(args, trainer, epoch_itr, valid_losses[0])
 
         reload_dataset = ':' in getattr(args, 'data', '')
         # sharded data: get train iterator for next epoch
         epoch_itr = trainer.get_train_iterator(epoch_itr.epoch, load_dataset=reload_dataset)
     train_meter.stop()
-    print('| done training in {:.1f} seconds'.format(train_meter.sum))
+    # print('| done training in {:.1f} seconds'.format(train_meter.sum))
 
 
 def train(args, trainer, task, epoch_itr):
@@ -159,7 +152,8 @@ def train(args, trainer, task, epoch_itr):
             and num_updates > 0
         ):
             valid_losses = validate(args, trainer, task, epoch_itr, valid_subsets)
-            checkpoint_utils.save_checkpoint(args, trainer, epoch_itr, valid_losses[0])
+            
+            # checkpoint_utils.save_checkpoint(args, trainer, epoch_itr, valid_losses[0])
 
         if num_updates >= max_update:
             break
@@ -206,7 +200,7 @@ def get_training_stats(trainer):
 
 def validate(args, trainer, task, epoch_itr, subsets):
     """Evaluate the model on the validation set(s) and return the losses."""
-
+    print("***********************************validate***********************************")
     if args.fixed_validation_seed is not None:
         # set fixed seed for every validation
         utils.set_torch_seed(args.fixed_validation_seed)
